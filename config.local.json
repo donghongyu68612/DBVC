@@ -1,0 +1,8 @@
+﻿{
+  "indexRoot": "D:\\Index-TTS-V3\\Index-TTS-V3",
+  "pythonExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\python.exe",
+  "ffmpegExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\ffmpeg\\ffmpeg.exe",
+  "localTtsExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe",
+  "defaultMode": "normal",
+  "notes": "前端录音优先尝试 mp3；若浏览器不支持则录 webm。后端会统一转 mp3 保存，并转 wav 给 Index-TTS 推理。"
+}

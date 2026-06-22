@@ -1,0 +1,16 @@
+﻿# Runtime/local data
+/data/
+/samples/
+/generated/
+/uploads/
+
+# Dependencies / logs
+/node_modules/
+*.log
+npm-debug.log*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

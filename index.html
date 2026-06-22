@@ -1,0 +1,131 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>我的声音克隆工作台</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="hero card">
+      <div>
+        <p class="eyebrow">Personal Voice Studio</p>
+        <h1>克隆我自己的声音</h1>
+        <p class="lead">保存你的声音样本，下次直接选择声音模型生成语音；所有生成音频都会保存到本地历史，可反复试听和下载。</p>
+      </div>
+      <div class="status-pill" id="apiStatus">检测中...</div>
+    </section>
+
+    <section class="notice card">
+      <strong>合规声明</strong>
+      <p>本页面仅用于克隆你本人声音，或你已获得明确书面授权的声音。请勿用于冒充他人、诈骗、骚扰、伪造证据或绕过身份验证。</p>
+    </section>
+
+    <form id="voiceForm" class="grid" autocomplete="off">
+      <section class="card panel">
+        <div class="panel-head">
+          <span class="step">1</span>
+          <div>
+            <h2>声音样本库</h2>
+            <p>录制/上传后先保存命名；下次可直接选择使用。</p>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>选择已保存声音样本</span>
+          <select id="savedSampleSelect">
+            <option value="">不使用已保存样本，使用下面的新录音/上传</option>
+          </select>
+        </label>
+        <div class="actions compact">
+          <button class="btn" type="button" id="useSavedSampleBtn">使用选中样本</button>
+          <button class="btn" type="button" id="renameSampleBtn">改名</button>
+          <button class="btn danger" type="button" id="deleteSampleBtn">删除</button>
+        </div>
+        <div id="sampleLibrary" class="list"></div>
+
+        <hr class="sep" />
+
+        <div class="recorder">
+          <button class="btn primary" type="button" id="recordBtn">开始录音</button>
+          <button class="btn" type="button" id="stopBtn" disabled>停止</button>
+          <span id="recordTimer">00:00</span>
+        </div>
+
+        <audio id="samplePreview" controls hidden></audio>
+
+        <label class="upload-zone" for="sampleFile">
+          <input id="sampleFile" name="sampleFile" type="file" accept="audio/*" />
+          <span>或点击上传音频文件（mp3 / wav / m4a / webm）</span>
+        </label>
+        <p class="hint" id="sampleName">尚未选择声音样本</p>
+
+        <div class="save-sample-box">
+          <label class="field">
+            <span>保存为声音样本名称</span>
+            <input id="sampleSaveName" type="text" placeholder="例如：我的自然说话声" />
+          </label>
+          <button class="btn primary" type="button" id="saveSampleBtn">保存声音样本</button>
+        </div>
+      </section>
+
+      <section class="card panel">
+        <div class="panel-head">
+          <span class="step">2</span>
+          <div>
+            <h2>输入要生成的文字</h2>
+            <p>可使用已保存样本，或临时使用当前录音/上传样本。</p>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>朗读文本</span>
+          <textarea id="scriptText" name="scriptText" rows="8" maxlength="1000" placeholder="例如：你好，这是我用自己的声音生成的一段测试语音。"></textarea>
+        </label>
+
+        <div class="two-cols">
+          <label class="field">
+            <span>语速</span>
+            <input id="speed" name="speed" type="range" min="0.75" max="1.25" step="0.05" value="1" />
+          </label>
+          <label class="field">
+            <span>情绪风格</span>
+            <select id="style" name="style">
+              <option value="natural">自然</option>
+              <option value="warm">温暖</option>
+              <option value="energetic">有活力</option>
+              <option value="calm">平静</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="consent">
+          <input id="consent" type="checkbox" />
+          <span>我确认这是我本人的声音，或我已获得声音所有者的明确授权。</span>
+        </label>
+
+        <div class="actions">
+          <button class="btn primary big" type="submit">生成语音并保存</button>
+          <button class="btn" type="reset">重置</button>
+        </div>
+
+        <div id="result" class="result" hidden></div>
+      </section>
+    </form>
+
+    <section class="card panel history-card">
+      <div class="panel-head">
+        <span class="step">3</span>
+        <div>
+          <h2>生成历史</h2>
+          <p>生成的语音已保存到本地，可反复试听、下载 MP3/WAV。</p>
+        </div>
+      </div>
+      <div id="generationHistory" class="list"></div>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
