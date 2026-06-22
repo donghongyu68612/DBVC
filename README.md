@@ -77,3 +77,15 @@ http://localhost:3010
 
 请仅用于你本人的声音，或你已获得明确授权的声音。不要用于冒充他人、诈骗、伪造证据、骚扰或绕过身份验证。
 
+
+## 本地模型启动脚本
+
+- GPT-SoVITS API：`E:\DBVC\scripts\start-gpt-sovits-api.bat`
+- CosyVoice2 WebUI：`E:\DBVC\scripts\start-cosyvoice2-webui.bat`
+- DBVC 网页：`C:\Users\dongliang\Documents\Codex\2026-06-22\ni\outputs\voice-clone-page\启动网页.bat`
+
+当前默认本地地址：
+
+- GPT-SoVITS：`http://127.0.0.1:9880`
+- CosyVoice2：`http://127.0.0.1:50000`
+- DBVC：`http://127.0.0.1:3010`
