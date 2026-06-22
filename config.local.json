@@ -15,7 +15,7 @@
                       "promptLang":  "zh"
                   },
     "cosyVoice2":  {
-                       "enabled":  false,
+                       "enabled":  true,
                        "root":  "E:\\DBVC\\Models\\CosyVoice",
                        "baseUrl":  "http://127.0.0.1:50000",
                        "endpoint":  "/inference_zero_shot"
