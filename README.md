@@ -89,3 +89,6 @@ http://localhost:3010
 - GPT-SoVITS：`http://127.0.0.1:9880`
 - CosyVoice2：`http://127.0.0.1:50000`
 - DBVC：`http://127.0.0.1:3010`
+
+- Index-TTS（E盘副本）：`E:\DBVC\scripts\start-index-tts-e.bat`
+- Index-TTS 根目录：`E:\DBVC\Models\Index-TTS`

@@ -1,9 +1,9 @@
 ﻿{
     "modelRoot":  "E:\\DBVC\\Models",
-    "indexRoot":  "D:\\Index-TTS-V3\\Index-TTS-V3",
-    "pythonExe":  "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\python.exe",
-    "ffmpegExe":  "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\ffmpeg\\ffmpeg.exe",
-    "localTtsExe":  "D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe",
+    "indexRoot":  "E:\\DBVC\\Models\\Index-TTS",
+    "pythonExe":  "E:\\DBVC\\Models\\Index-TTS\\runtime\\python.exe",
+    "ffmpegExe":  "E:\\DBVC\\Models\\Index-TTS\\runtime\\ffmpeg\\ffmpeg.exe",
+    "localTtsExe":  "E:\\DBVC\\scripts\\start-index-tts-e.bat",
     "defaultMode":  "normal",
     "defaultModel":  "gpt-sovits",
     "gptSovits":  {
