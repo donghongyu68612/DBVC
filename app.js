@@ -19,6 +19,7 @@ const result = $('#result');
 const apiStatus = $('#apiStatus');
 const modelSelect = $('#modelSelect');
 const modelStatusHint = $('#modelStatusHint');
+const compareModelsBtn = $('#compareModelsBtn');
 
 let mediaRecorder;
 let chunks = [];
@@ -145,6 +146,30 @@ function renderSamples() {
   sampleLibrary.querySelectorAll('[data-use]').forEach(btn => {
     btn.addEventListener('click', () => useSavedSample(btn.dataset.use));
   });
+}
+
+
+
+function renderComparisonResults(items) {
+  const box = document.createElement('div');
+  box.className = 'list';
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'list-item';
+    row.innerHTML = `
+      <div class="list-main">
+        <strong>${escapeHtml(item.modelName || item.model)}</strong>
+        <span>${escapeHtml(item.message || '')}</span>
+        <audio controls src="${item.audioMp3Url || item.audioUrl}"></audio>
+      </div>
+      <div class="list-actions">
+        <a class="btn primary" href="${item.audioMp3Url || item.audioUrl}" download>下载MP3</a>
+        <a class="btn" href="${item.audioWavUrl || '#'}" download>下载WAV</a>
+      </div>
+    `;
+    box.append(row);
+  }
+  return box;
 }
 
 function renderGenerations() {
@@ -301,6 +326,39 @@ form.addEventListener('reset', () => {
     result.hidden = true;
     timer.textContent = '00:00';
   });
+});
+
+
+
+compareModelsBtn.addEventListener('click', async () => {
+  const text = $('#scriptText').value.trim();
+  const consent = $('#consent').checked;
+  if (!consent) return showResult('请先确认你拥有该声音的授权。', true);
+  if (!text) return showResult('请输入要生成的朗读文本。', true);
+  if (!selectedSavedSampleId && !currentSampleFile) return showResult('请选择已保存样本，或录制/上传一个新样本。', true);
+
+  const formData = new FormData();
+  formData.append('text', text);
+  formData.append('promptText', $('#promptText').value.trim());
+  formData.append('style', $('#style').value);
+  formData.append('speed', $('#speed').value);
+  formData.append('consentConfirmed', 'true');
+  if (selectedSavedSampleId) {
+    formData.append('sampleId', selectedSavedSampleId);
+  } else {
+    const uploadName = currentSampleFile.name || (currentSampleFile.type?.includes('mp3') || currentSampleFile.type?.includes('mpeg') ? 'recording.mp3' : 'recording.webm');
+    formData.append('sample', currentSampleFile, uploadName);
+  }
+  showResult('正在依次生成 GPT-SoVITS、CosyVoice2、Index-TTS，请稍等……');
+  try {
+    const res = await fetch('/api/compare-models', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) throw new Error(data.error || data.detail || '对比生成失败');
+    showResult('三模型对比生成完成。', false, renderComparisonResults(data.results || []));
+    await loadGenerations();
+  } catch (error) {
+    showResult(`对比生成失败：${error.message}`, true);
+  }
 });
 
 form.addEventListener('submit', async event => {

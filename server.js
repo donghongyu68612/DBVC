@@ -59,6 +59,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/samples/rename') return renameSampleEndpoint(req, res);
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/samples/')) return deleteSampleEndpoint(url, res);
     if (req.method === 'GET' && url.pathname === '/api/generations') return listGenerations(res);
+    if (req.method === 'POST' && url.pathname === '/api/compare-models') return handleCompareModels(req, res);
     if (req.method === 'POST' && url.pathname === '/api/voice-clone') return handleVoiceClone(req, res);
 
     return serveStatic(req, res, url.pathname);
@@ -170,20 +171,53 @@ async function persistSample({ config, file, name }) {
   };
 }
 
-async function handleVoiceClone(req, res) {
-  const contentType = req.headers['content-type'] || '';
-  if (!contentType.includes('multipart/form-data')) return json(res, 400, { ok: false, error: '请求必须是 multipart/form-data。' });
 
+
+async function parseVoiceCloneRequest(req) {
+  const contentType = req.headers['content-type'] || '';
+  if (!contentType.includes('multipart/form-data')) throw new Error('请求必须是 multipart/form-data。');
   const body = await readRequestBody(req, maxUploadBytes);
   const form = parseMultipart(body, contentType);
   const text = String(form.fields.text || '').trim();
   const style = String(form.fields.style || 'natural');
   const speed = String(form.fields.speed || '1');
-  const model = normalizeModelId(String(form.fields.model || config.defaultModel || 'index-tts'));
+  const model = normalizeModelId(String(form.fields.model || 'index-tts'));
   const promptText = String(form.fields.promptText || '').trim();
   const consentConfirmed = String(form.fields.consentConfirmed || 'false');
   const sampleId = String(form.fields.sampleId || '');
   const sampleFile = form.files.sample;
+  return { form, text, style, speed, model, promptText, consentConfirmed, sampleId, sampleFile };
+}
+
+async function handleCompareModels(req, res) {
+  try {
+    const parsed = await parseVoiceCloneRequest(req);
+    const models = ['gpt-sovits', 'cosyvoice2', 'index-tts'];
+    const results = [];
+    for (const model of models) {
+      const fakeReq = { headers: req.headers };
+      fakeReq._parsed = { ...parsed, model };
+      const result = await generateVoiceFromParsed(fakeReq, true);
+      results.append(result);
+    }
+    return json(res, 200, { ok: true, results });
+  } catch (error) {
+    return json(res, 500, { ok: false, error: String(error?.message || error) });
+  }
+}
+
+async function handleVoiceClone(req, res) {
+  try {
+    const data = await generateVoiceFromParsed(req, false);
+    return json(res, 200, { ok: true, ...data, message: '已生成语音，文件已保存到本地生成历史。' });
+  } catch (error) {
+    return json(res, 500, { ok: false, error: String(error?.message || error), detail: String(error?.message || error), log: error?.log || '' });
+  }
+}
+
+async function generateVoiceFromParsed(req, forCompare = false) {
+  const parsed = req._parsed || await parseVoiceCloneRequest(req);
+  const { text, style, speed, model, promptText, consentConfirmed, sampleId, sampleFile } = parsed;
   const config = readConfig();
 
   if (consentConfirmed !== 'true') return json(res, 400, { ok: false, error: '必须确认声音授权。' });
@@ -246,11 +280,13 @@ async function handleVoiceClone(req, res) {
     db.generations.unshift(generation);
     saveDb(db);
 
-    return json(res, 200, { ok: true, ...generationWithUrls(generation), message: '已生成语音，文件已保存到本地生成历史。' });
+    return { ...generationWithUrls(generation), message: '已生成语音，文件已保存到本地生成历史。' };
   } catch (error) {
-    return json(res, 500, { ok: false, error: `${modelDisplayName(model)} 本地生成失败。`, detail: String(error?.message || error), log: error?.log || '', config: safeConfig(config) });
+    error.message = `${modelDisplayName(model)} 本地生成失败：${String(error?.message || error)}`;
+    throw error;
   }
 }
+
 
 function startOriginalWebUI(res) {
   const config = readConfig();
