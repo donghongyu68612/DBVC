@@ -28,7 +28,7 @@ function readConfig() {
     gptSovits: { enabled: false, baseUrl: 'http://127.0.0.1:9880', endpoint: '/tts', textLang: 'zh', promptLang: 'zh' },
     cosyVoice2: { enabled: false, baseUrl: 'http://127.0.0.1:50000', endpoint: '/inference_zero_shot' }
   };
-  try { return { ...fallback, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) }; }
+  try { return { ...fallback, ...JSON.parse(fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '')) }; }
   catch { return fallback; }
 }
 
@@ -463,3 +463,4 @@ server.listen(port, '127.0.0.1', () => {
   console.log(`Voice clone web app: http://127.0.0.1:${port}`);
   console.log(`Using Index-TTS root: ${readConfig().indexRoot}`);
 });
+

@@ -1,8 +1,24 @@
 ﻿{
-  "indexRoot": "D:\\Index-TTS-V3\\Index-TTS-V3",
-  "pythonExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\python.exe",
-  "ffmpegExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\ffmpeg\\ffmpeg.exe",
-  "localTtsExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe",
-  "defaultMode": "normal",
-  "notes": "前端录音优先尝试 mp3；若浏览器不支持则录 webm。后端会统一转 mp3 保存，并转 wav 给 Index-TTS 推理。"
+    "modelRoot":  "E:\\DBVC\\Models",
+    "indexRoot":  "D:\\Index-TTS-V3\\Index-TTS-V3",
+    "pythonExe":  "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\python.exe",
+    "ffmpegExe":  "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\ffmpeg\\ffmpeg.exe",
+    "localTtsExe":  "D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe",
+    "defaultMode":  "normal",
+    "defaultModel":  "gpt-sovits",
+    "gptSovits":  {
+                      "enabled":  true,
+                      "root":  "E:\\DBVC\\Models\\GPT-SoVITS",
+                      "baseUrl":  "http://127.0.0.1:9880",
+                      "endpoint":  "/tts",
+                      "textLang":  "zh",
+                      "promptLang":  "zh"
+                  },
+    "cosyVoice2":  {
+                       "enabled":  false,
+                       "root":  "E:\\DBVC\\Models\\CosyVoice",
+                       "baseUrl":  "http://127.0.0.1:50000",
+                       "endpoint":  "/inference_zero_shot"
+                   },
+    "notes":  "模型顺序：1 GPT-SoVITS，2 CosyVoice2，3 Index-TTS。GPT-SoVITS/CosyVoice2 必须先本地部署 API，并把 enabled 改为 true。只允许本地 127.0.0.1/localhost 地址。"
 }
