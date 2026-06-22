@@ -17,6 +17,8 @@ const generationHistory = $('#generationHistory');
 const form = $('#voiceForm');
 const result = $('#result');
 const apiStatus = $('#apiStatus');
+const modelSelect = $('#modelSelect');
+const modelStatusHint = $('#modelStatusHint');
 
 let mediaRecorder;
 let chunks = [];
@@ -72,11 +74,13 @@ async function apiJson(url, options) {
 async function refreshStatus() {
   try {
     const data = await apiJson('/api/local-tts/status');
-    if (data.status?.ready) {
-      apiStatus.textContent = 'Index-TTS 环境已就绪';
+    const modelNotes = (data.models || []).map(m => `${m.order}. ${m.name}: ${m.configured ? '可用' : '未配置'}${m.note ? ' - ' + m.note : ''}`);
+    if (modelStatusHint) modelStatusHint.textContent = modelNotes.join(' ｜ ');
+    if (data.models?.some(m => m.configured)) {
+      apiStatus.textContent = '本地TTS模型检测完成';
       apiStatus.classList.add('ok');
     } else {
-      apiStatus.textContent = 'Index-TTS 环境未就绪，请检查配置';
+      apiStatus.textContent = '本地TTS模型未配置，请检查 config.local.json';
       apiStatus.classList.remove('ok');
     }
   } catch {
@@ -154,7 +158,7 @@ function renderGenerations() {
     item.className = 'list-item';
     item.innerHTML = `
       <div class="list-main">
-        <strong>${escapeHtml(gen.sampleName || '声音样本')} · ${new Date(gen.createdAt).toLocaleString()}</strong>
+        <strong> ·  · ${new Date(gen.createdAt).toLocaleString()}</strong>
         <span>${escapeHtml((gen.text || '').slice(0, 120))}${(gen.text || '').length > 120 ? '...' : ''}</span>
         <audio controls src="${gen.audioMp3Url || gen.audioUrl}"></audio>
       </div>
@@ -309,6 +313,8 @@ form.addEventListener('submit', async event => {
 
   const formData = new FormData();
   formData.append('text', text);
+  formData.append('model', $('#modelSelect').value);
+  formData.append('promptText', $('#promptText').value.trim());
   formData.append('style', $('#style').value);
   formData.append('speed', $('#speed').value);
   formData.append('consentConfirmed', 'true');
@@ -360,3 +366,5 @@ function escapeHtml(value) {
 refreshStatus();
 loadSamples();
 loadGenerations();
+
+

@@ -1,63 +1,79 @@
-﻿# DBVC
+﻿# 我的声音克隆工作台：已整合本地 Index-TTS-V3
 
-DBVC 是一个本地部署的个人声音克隆 Web 工作台，已整合本地 Index-TTS-V3。
-
-## 功能
-
-- 本地网页录音或上传声音样本
-- 声音样本库：保存、命名、改名、删除、试听、下载
-- 下次直接选择已保存声音样本生成语音，无需重复录制
-- 调用本地 Index-TTS-V3 推理
-- 生成历史：本地保存、反复试听、下载 MP3/WAV
-- 不依赖云端 TTS API
-
-## 默认本地依赖路径
-
-当前配置默认使用：
+这个新网页程序已经整合你的本地 TTS：
 
 ```text
 D:\Index-TTS-V3\Index-TTS-V3
 D:\Index-TTS-V3\Index-TTS-V3\deepface\python.exe
-D:\Index-TTS-V3\Index-TTS-V3\deepface\ffmpeg\ffmpeg.exe
 ```
 
-如果你的 Index-TTS-V3 目录不同，请修改：
+现在生成语音时，网页后端会：
 
-```text
-config.local.json
-```
+1. 接收你上传/录制的参考音频。
+2. 保存到本项目 `uploads/`。
+3. 调用本地 `deepface\python.exe`。
+4. 运行 `index_tts_bridge.py`。
+5. 加载 `D:\Index-TTS-V3\Index-TTS-V3\indextts` 和 `checkpoints`。
+6. 执行 `IndexTTS.infer()` / `IndexTTS.infer_fast()`。
+7. 把生成的 wav 存到 `generated/`。
+8. 返回给页面直接播放。
 
-## 启动
+也就是说：**不再依赖云端 API，也不再只是占位。**
 
-```bat
-node server.js
-```
+## 一键运行新网页
 
-然后打开：
-
-```text
-http://127.0.0.1:3010
-```
-
-也可以双击：
+双击：
 
 ```text
 启动网页.bat
 ```
 
-## 数据目录
+或者手动运行：
 
-运行后会自动生成：
-
-```text
-data/         样本库和生成历史数据库
-samples/      保存的声音样本 MP3/WAV
-uploads/      临时上传文件
-generated/    生成的语音文件 MP3/WAV
+```bash
+cd /d C:\Users\dongliang\Documents\Codex\2026-06-22\ni\outputs\voice-clone-page
+npm install
+npm start
 ```
 
-这些目录已加入 `.gitignore`，不会提交到 GitHub。
+然后打开：
 
-## 合规声明
+```text
+http://localhost:3010
+```
 
-仅用于你本人的声音，或你已获得明确授权的声音。请勿用于冒充他人、诈骗、伪造证据、骚扰或绕过身份验证。
+## 文件说明
+
+- `index.html`：网页页面
+- `app.js`：前端录音、上传、提交、播放逻辑
+- `server.js`：Node 后端，负责调用本地 Index-TTS
+- `index_tts_bridge.py`：Python 桥接脚本，真正调用 IndexTTS
+- `config.local.json`：本地路径配置
+- `uploads/`：参考音频保存目录，运行后自动生成
+- `generated/`：生成音频输出目录，运行后自动生成
+
+## 配置
+
+`config.local.json` 当前为：
+
+```json
+{
+  "indexRoot": "D:\\Index-TTS-V3\\Index-TTS-V3",
+  "pythonExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\python.exe",
+  "localTtsExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe",
+  "defaultMode": "normal"
+}
+```
+
+如果你以后移动了 Index-TTS-V3 目录，只需要改这里。
+
+## 页面里的“启动原版 Index-TTS WebUI”按钮
+
+这个按钮只是帮你打开原版 `一键启动.exe`，方便你对照测试。
+
+新网页自己的生成逻辑不依赖这个 WebUI 是否打开，因为它是直接调用 Python 模型推理。
+
+## 合规提醒
+
+请仅用于你本人的声音，或你已获得明确授权的声音。不要用于冒充他人、诈骗、伪造证据、骚扰或绕过身份验证。
+

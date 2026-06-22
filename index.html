@@ -79,8 +79,7 @@
           </div>
         </div>
 
-        <label class="field">
-          <span>朗读文本</span>
+        <label class="field"><span>本地TTS模型</span><select id="modelSelect" name="model"><option value="gpt-sovits">1. GPT-SoVITS 个人音色模型（本地部署）</option><option value="cosyvoice2">2. CosyVoice2 中文情感模型（本地部署）</option><option value="index-tts">3. Index-TTS 当前模型（已接入）</option></select><p class="hint" id="modelStatusHint">正在检测模型状态...</p></label><label class="field"><span>参考文本/提示词（GPT-SoVITS / CosyVoice2 推荐填写）</span><input id="promptText" name="promptText" type="text" placeholder="这里填写声音样本里大概说了什么，可提升相似度和稳定性" /></label><label class="field"><span>朗读文本</span>
           <textarea id="scriptText" name="scriptText" rows="8" maxlength="1000" placeholder="例如：你好，这是我用自己的声音生成的一段测试语音。"></textarea>
         </label>
 
@@ -129,3 +128,4 @@
   <script src="./app.js"></script>
 </body>
 </html>
+

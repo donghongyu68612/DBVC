@@ -23,7 +23,10 @@ function readConfig() {
     pythonExe: 'D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\python.exe',
     ffmpegExe: 'D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\ffmpeg\\ffmpeg.exe',
     localTtsExe: 'D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe',
-    defaultMode: 'normal'
+    defaultMode: 'normal',
+    defaultModel: 'gpt-sovits',
+    gptSovits: { enabled: false, baseUrl: 'http://127.0.0.1:9880', endpoint: '/tts', textLang: 'zh', promptLang: 'zh' },
+    cosyVoice2: { enabled: false, baseUrl: 'http://127.0.0.1:50000', endpoint: '/inference_zero_shot' }
   };
   try { return { ...fallback, ...JSON.parse(fs.readFileSync(configPath, 'utf8')) }; }
   catch { return fallback; }
@@ -48,7 +51,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/local-tts/status') {
       const config = readConfig();
-      return json(res, 200, { ok: true, config: safeConfig(config), status: checkLocalIndexTts(config) });
+      return json(res, 200, { ok: true, config: safeConfig(config), status: checkLocalIndexTts(config), models: getModelStatus(config) });
     }
     if (req.method === 'POST' && url.pathname === '/api/local-tts/start') return startOriginalWebUI(res);
     if (req.method === 'GET' && url.pathname === '/api/samples') return listSamples(res);
@@ -176,6 +179,8 @@ async function handleVoiceClone(req, res) {
   const text = String(form.fields.text || '').trim();
   const style = String(form.fields.style || 'natural');
   const speed = String(form.fields.speed || '1');
+  const model = normalizeModelId(String(form.fields.model || config.defaultModel || 'index-tts'));
+  const promptText = String(form.fields.promptText || '').trim();
   const consentConfirmed = String(form.fields.consentConfirmed || 'false');
   const sampleId = String(form.fields.sampleId || '');
   const sampleFile = form.files.sample;
@@ -217,13 +222,16 @@ async function handleVoiceClone(req, res) {
   const mp3OutputPath = path.join(generatedDir, `${id}.mp3`);
 
   try {
-    const result = await runIndexTtsBridge({ config, samplePath: wavSamplePath, text, outputPath: wavOutputPath, style, speed });
+    const result = await runSelectedLocalModel({ config, model, samplePath: wavSamplePath, text, promptText, outputPath: wavOutputPath, style, speed });
     await convertAudio(config, result.output || wavOutputPath, mp3OutputPath, ['-y', '-i', result.output || wavOutputPath, '-vn', '-ac', '1', '-ar', '44100', '-b:a', '192k', mp3OutputPath]);
 
     const generation = {
       id,
       createdAt: new Date().toISOString(),
+      model,
+      modelName: modelDisplayName(model),
       text,
+      promptText,
       style,
       speed,
       sampleId: usedSample?.id || null,
@@ -240,7 +248,7 @@ async function handleVoiceClone(req, res) {
 
     return json(res, 200, { ok: true, ...generationWithUrls(generation), message: '已生成语音，文件已保存到本地生成历史。' });
   } catch (error) {
-    return json(res, 500, { ok: false, error: '本地 Index-TTS 生成失败。', detail: String(error?.message || error), log: error?.log || '', config: safeConfig(config) });
+    return json(res, 500, { ok: false, error: `${modelDisplayName(model)} 本地生成失败。`, detail: String(error?.message || error), log: error?.log || '', config: safeConfig(config) });
   }
 }
 
@@ -279,6 +287,88 @@ function convertAudio(config, inputPath, outputPath, args) {
       resolve(outputPath);
     });
   });
+}
+
+
+function normalizeModelId(model) {
+  if (['gpt-sovits', 'cosyvoice2', 'index-tts'].includes(model)) return model;
+  return 'index-tts';
+}
+
+function modelDisplayName(model) {
+  return {
+    'gpt-sovits': 'GPT-SoVITS 个人音色模型',
+    'cosyvoice2': 'CosyVoice2 中文情感模型',
+    'index-tts': 'Index-TTS 当前模型'
+  }[model] || model;
+}
+
+function isLocalBaseUrl(value) {
+  try {
+    const u = new URL(value);
+    return ['127.0.0.1', 'localhost', '::1'].includes(u.hostname);
+  } catch { return false; }
+}
+
+function getModelStatus(config) {
+  return [
+    { id: 'gpt-sovits', name: modelDisplayName('gpt-sovits'), order: 1, localOnly: true, configured: !!config.gptSovits?.enabled && isLocalBaseUrl(config.gptSovits?.baseUrl || ''), baseUrl: config.gptSovits?.baseUrl || '', note: '需本地启动 GPT-SoVITS API，默认 http://127.0.0.1:9880/tts' },
+    { id: 'cosyvoice2', name: modelDisplayName('cosyvoice2'), order: 2, localOnly: true, configured: !!config.cosyVoice2?.enabled && isLocalBaseUrl(config.cosyVoice2?.baseUrl || ''), baseUrl: config.cosyVoice2?.baseUrl || '', note: '需本地启动 CosyVoice2 API，默认 http://127.0.0.1:50000/inference_zero_shot' },
+    { id: 'index-tts', name: modelDisplayName('index-tts'), order: 3, localOnly: true, configured: checkLocalIndexTts(config).ready, baseUrl: '', note: '当前已接入的本地 Index-TTS 直连模型' }
+  ];
+}
+
+async function runSelectedLocalModel({ config, model, samplePath, text, promptText, outputPath, style, speed }) {
+  if (model === 'gpt-sovits') return runGptSovitsLocalApi({ config, samplePath, text, promptText, outputPath });
+  if (model === 'cosyvoice2') return runCosyVoice2LocalApi({ config, samplePath, text, promptText, outputPath });
+  return runIndexTtsBridge({ config, samplePath, text, outputPath, style, speed });
+}
+
+async function runGptSovitsLocalApi({ config, samplePath, text, promptText, outputPath }) {
+  const modelConfig = config.gptSovits || {};
+  if (!modelConfig.enabled) throw new Error('GPT-SoVITS 未启用。请本地部署 GPT-SoVITS API，并在 config.local.json 里把 gptSovits.enabled 改为 true。');
+  if (!isLocalBaseUrl(modelConfig.baseUrl || '')) throw new Error('GPT-SoVITS 只允许配置本地地址，例如 http://127.0.0.1:9880。');
+  const endpoint = `${String(modelConfig.baseUrl).replace(/\/$/, '')}${modelConfig.endpoint || '/tts'}`;
+  const started = Date.now();
+  const body = { text, text_lang: modelConfig.textLang || 'zh', ref_audio_path: samplePath, prompt_text: promptText || '', prompt_lang: modelConfig.promptLang || 'zh', media_type: 'wav', streaming_mode: false };
+  const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  await saveLocalModelAudioResponse(response, outputPath, modelConfig.baseUrl);
+  return { ok: true, output: outputPath, elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)) };
+}
+
+async function runCosyVoice2LocalApi({ config, samplePath, text, promptText, outputPath }) {
+  const modelConfig = config.cosyVoice2 || {};
+  if (!modelConfig.enabled) throw new Error('CosyVoice2 未启用。请本地部署 CosyVoice2 API，并在 config.local.json 里把 cosyVoice2.enabled 改为 true。');
+  if (!isLocalBaseUrl(modelConfig.baseUrl || '')) throw new Error('CosyVoice2 只允许配置本地地址，例如 http://127.0.0.1:50000。');
+  const endpoint = `${String(modelConfig.baseUrl).replace(/\/$/, '')}${modelConfig.endpoint || '/inference_zero_shot'}`;
+  const started = Date.now();
+  const body = { tts_text: text, prompt_text: promptText || '', prompt_wav_path: samplePath, output_format: 'wav' };
+  const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  await saveLocalModelAudioResponse(response, outputPath, modelConfig.baseUrl);
+  return { ok: true, output: outputPath, elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)) };
+}
+
+async function saveLocalModelAudioResponse(response, outputPath, baseUrl) {
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`本地模型 API HTTP ${response.status}: ${errorText.slice(0, 800)}`);
+  }
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const data = await response.json();
+    const audioPath = data.audio_path || data.output_path || data.path || data.wav_path;
+    const audioUrl = data.audio_url || data.url;
+    if (audioPath && fs.existsSync(audioPath)) { fs.copyFileSync(audioPath, outputPath); return; }
+    if (audioUrl) {
+      const absolute = audioUrl.startsWith('http') ? audioUrl : `${String(baseUrl).replace(/\/$/, '')}/${audioUrl.replace(/^\/+/, '')}`;
+      const audioResponse = await fetch(absolute);
+      if (!audioResponse.ok) throw new Error(`下载本地模型音频失败 HTTP ${audioResponse.status}`);
+      fs.writeFileSync(outputPath, Buffer.from(await audioResponse.arrayBuffer()));
+      return;
+    }
+    throw new Error(`本地模型 API 返回 JSON，但没有 audio_path/audio_url：${JSON.stringify(data).slice(0, 800)}`);
+  }
+  fs.writeFileSync(outputPath, Buffer.from(await response.arrayBuffer()));
 }
 
 function runIndexTtsBridge({ config, samplePath, text, outputPath, style }) {
@@ -366,7 +456,7 @@ function text(res, status, body) { res.writeHead(status, { 'Content-Type': 'text
 function mimeType(file) { const ext = path.extname(file).toLowerCase(); return { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.webm': 'audio/webm', '.ogg': 'audio/ogg' }[ext] || 'application/octet-stream'; }
 function extensionFromMime(mime = '') { if (mime.includes('mpeg') || mime.includes('mp3')) return '.mp3'; if (mime.includes('wav')) return '.wav'; if (mime.includes('mp4') || mime.includes('aac')) return '.m4a'; if (mime.includes('webm')) return '.webm'; if (mime.includes('ogg')) return '.ogg'; return ''; }
 function sanitizeName(name) { return name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) || '未命名声音样本'; }
-function safeConfig(config) { return { indexRoot: config.indexRoot, pythonExe: config.pythonExe, ffmpegExe: config.ffmpegExe, localTtsExe: config.localTtsExe, defaultMode: config.defaultMode }; }
+function safeConfig(config) { return { indexRoot: config.indexRoot, pythonExe: config.pythonExe, ffmpegExe: config.ffmpegExe, localTtsExe: config.localTtsExe, defaultMode: config.defaultMode, defaultModel: config.defaultModel, gptSovits: config.gptSovits, cosyVoice2: config.cosyVoice2 }; }
 
 const port = Number(process.env.PORT || 3010);
 server.listen(port, '127.0.0.1', () => {
