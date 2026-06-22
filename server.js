@@ -51,7 +51,8 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/local-tts/status') {
       const config = readConfig();
-      return json(res, 200, { ok: true, config: safeConfig(config), status: checkLocalIndexTts(config), models: getModelStatus(config) });
+      const models = await getModelStatus(config);
+      return json(res, 200, { ok: true, config: safeConfig(config), status: checkLocalIndexTts(config), models });
     }
     if (req.method === 'POST' && url.pathname === '/api/local-tts/start') return startOriginalWebUI(res);
     if (req.method === 'GET' && url.pathname === '/api/samples') return listSamples(res);
@@ -346,11 +347,30 @@ function isLocalBaseUrl(value) {
   } catch { return false; }
 }
 
-function getModelStatus(config) {
+
+
+async function probeHttp(url) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    return { online: res.ok, status: res.status };
+  } catch (error) {
+    return { online: false, error: String(error?.message || error) };
+  }
+}
+async function getModelStatus(config) {
+  const gptConfigured = !!config.gptSovits?.enabled && isLocalBaseUrl(config.gptSovits?.baseUrl || '');
+  const cosyConfigured = !!config.cosyVoice2?.enabled && isLocalBaseUrl(config.cosyVoice2?.baseUrl || '');
+  const indexConfigured = checkLocalIndexTts(config).ready;
+  const gptProbe = gptConfigured ? await probeHttp(`${String(config.gptSovits.baseUrl).replace(/\/$/, '')}/docs`) : { online: false };
+  const cosyProbe = cosyConfigured ? await probeHttp(`${String(config.cosyVoice2.baseUrl).replace(/\/$/, '')}`) : { online: false };
+  const indexProbe = await probeHttp('http://127.0.0.1:7860');
   return [
-    { id: 'gpt-sovits', name: modelDisplayName('gpt-sovits'), order: 1, localOnly: true, configured: !!config.gptSovits?.enabled && isLocalBaseUrl(config.gptSovits?.baseUrl || ''), baseUrl: config.gptSovits?.baseUrl || '', note: '需本地启动 GPT-SoVITS API，默认 http://127.0.0.1:9880/tts' },
-    { id: 'cosyvoice2', name: modelDisplayName('cosyvoice2'), order: 2, localOnly: true, configured: !!config.cosyVoice2?.enabled && isLocalBaseUrl(config.cosyVoice2?.baseUrl || ''), baseUrl: config.cosyVoice2?.baseUrl || '', note: '需本地启动 CosyVoice2 API，默认 http://127.0.0.1:50000/inference_zero_shot' },
-    { id: 'index-tts', name: modelDisplayName('index-tts'), order: 3, localOnly: true, configured: checkLocalIndexTts(config).ready, baseUrl: '', note: '当前已接入的本地 Index-TTS 直连模型' }
+    { id: 'gpt-sovits', name: modelDisplayName('gpt-sovits'), order: 1, localOnly: true, configured: gptConfigured, online: !!gptProbe.online, baseUrl: config.gptSovits?.baseUrl || '', note: '需本地启动 GPT-SoVITS API，默认 http://127.0.0.1:9880/tts' },
+    { id: 'cosyvoice2', name: modelDisplayName('cosyvoice2'), order: 2, localOnly: true, configured: cosyConfigured, online: !!cosyProbe.online, baseUrl: config.cosyVoice2?.baseUrl || '', note: '需本地启动 CosyVoice2 API，默认 http://127.0.0.1:50000/inference_zero_shot' },
+    { id: 'index-tts', name: modelDisplayName('index-tts'), order: 3, localOnly: true, configured: indexConfigured, online: !!indexProbe.online, baseUrl: 'http://127.0.0.1:7860', note: '当前已接入的本地 Index-TTS 直连模型' }
   ];
 }
 

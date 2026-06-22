@@ -75,7 +75,7 @@ async function apiJson(url, options) {
 async function refreshStatus() {
   try {
     const data = await apiJson('/api/local-tts/status');
-    const modelNotes = (data.models || []).map(m => `${m.order}. ${m.name}: ${m.configured ? '可用' : '未配置'}${m.note ? ' - ' + m.note : ''}`);
+    const modelNotes = (data.models || []).map(m => `${m.order}. ${m.name}: ${m.online ? '在线' : (m.configured ? '离线' : '未配置')}${m.note ? ' - ' + m.note : ''}`);
     if (modelStatusHint) modelStatusHint.textContent = modelNotes.join(' ｜ ');
     if (data.models?.some(m => m.configured)) {
       apiStatus.textContent = '本地TTS模型检测完成';
