@@ -1,9 +1,9 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>我的声音克隆工作台</title>
+  <title>DBVC语音生成</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -11,10 +11,9 @@
     <section class="hero card">
       <div>
         <p class="eyebrow">Personal Voice Studio</p>
-        <h1>克隆我自己的声音</h1>
-        <p class="lead">保存你的声音样本，下次直接选择声音模型生成语音；所有生成音频都会保存到本地历史，可反复试听和下载。</p>
+        <h1>DBVC语音生成</h1>
+        <p class="lead">保存声音样本，下次可直接选择样本生成语音；所有生成音频都会保存到本地历史，可反复试听、下载和删除。</p>
       </div>
-      <div class="status-pill" id="apiStatus">检测中...</div>
     </section>
 
     <section class="notice card">
@@ -79,7 +78,7 @@
           </div>
         </div>
 
-        <label class="field"><span>本地TTS模型</span><select id="modelSelect" name="model"><option value="gpt-sovits">1. GPT-SoVITS 个人音色模型（本地部署）</option><option value="cosyvoice2">2. CosyVoice2 中文情感模型（本地部署）</option><option value="index-tts">3. Index-TTS 当前模型（已接入）</option></select><p class="hint" id="modelStatusHint">正在检测模型状态...</p></label><label class="field"><span>参考文本/提示词（GPT-SoVITS / CosyVoice2 推荐填写）</span><input id="promptText" name="promptText" type="text" placeholder="这里填写声音样本里大概说了什么，可提升相似度和稳定性" /></label><label class="field"><span>朗读文本</span>
+        <label class="field"><span>本地TTS模型</span><select id="modelSelect" name="model"><option value="index-tts" selected>Index-TTS 当前模型</option><option value="gpt-sovits" disabled>GPT-SoVITS（实验中 / 暂不可用）</option><option value="cosyvoice2" disabled>CosyVoice2（实验中 / 暂不可用）</option></select></label><label class="field"><span>参考文本/提示词（GPT-SoVITS / CosyVoice2 推荐填写）</span><input id="promptText" name="promptText" type="text" placeholder="这里填写声音样本里大概说了什么，可提升相似度和稳定性" /></label><label class="field"><span>朗读文本</span>
           <textarea id="scriptText" name="scriptText" rows="8" maxlength="1000" placeholder="例如：你好，这是我用自己的声音生成的一段测试语音。"></textarea>
         </label>
 
@@ -106,7 +105,7 @@
 
         <div class="actions">
           <button class="btn primary big" type="submit">生成语音并保存</button>
-          <button class="btn" type="button" id="compareModelsBtn">一键对比三模型</button>
+          <button class="btn" type="button" id="compareModelsBtn" disabled title="稳定模式下暂不对比三模型；请先使用 Index-TTS 跑通生成。">三模型对比（实验，暂不可用）</button>
           <button class="btn" type="reset">重置</button>
         </div>
 
@@ -119,7 +118,7 @@
         <span class="step">3</span>
         <div>
           <h2>生成历史</h2>
-          <p>生成的语音已保存到本地，可反复试听、下载 MP3/WAV。</p>
+          <p>生成的语音已保存到本地，可反复试听、下载 MP3 或删除。</p>
         </div>
       </div>
       <div id="generationHistory" class="list"></div>
@@ -129,4 +128,5 @@
   <script src="./app.js"></script>
 </body>
 </html>
+
 

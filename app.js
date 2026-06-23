@@ -36,6 +36,14 @@ function formatTime(totalSeconds) {
   const seconds = String(totalSeconds % 60).padStart(2, '0');
   return `${minutes}:${seconds}`;
 }
+function escapeHtml(value = '') {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
 
 function showResult(message, isError = false, extraNode) {
   result.hidden = false;
@@ -75,18 +83,23 @@ async function apiJson(url, options) {
 async function refreshStatus() {
   try {
     const data = await apiJson('/api/local-tts/status');
-    const modelNotes = (data.models || []).map(m => `${m.order}. ${m.name}: ${m.online ? '在线' : (m.configured ? '离线' : '未配置')}${m.note ? ' - ' + m.note : ''}`);
-    if (modelStatusHint) modelStatusHint.textContent = modelNotes.join(' ｜ ');
-    if (data.models?.some(m => m.configured)) {
-      apiStatus.textContent = '本地TTS模型检测完成';
-      apiStatus.classList.add('ok');
-    } else {
-      apiStatus.textContent = '本地TTS模型未配置，请检查 config.local.json';
-      apiStatus.classList.remove('ok');
+    if (modelSelect && data.config?.defaultModel) modelSelect.value = data.config.defaultModel;
+    for (const option of modelSelect?.options || []) {
+      const m = (data.models || []).find(item => item.id === option.value);
+      option.disabled = option.value !== 'index-tts' && (!m?.configured || !m?.online);
+      if (option.value === 'index-tts') option.textContent = 'Index-TTS 当前模型';
+      if (option.value === 'gpt-sovits') option.textContent = 'GPT-SoVITS（实验中 / 暂不可用）';
+      if (option.value === 'cosyvoice2') option.textContent = 'CosyVoice2（实验中 / 暂不可用）';
+    }
+    if (modelStatusHint) modelStatusHint.hidden = true;
+    if (apiStatus) apiStatus.hidden = true;
+    if (compareModelsBtn) {
+      compareModelsBtn.disabled = true;
+      compareModelsBtn.title = '稳定模式下暂不对比三模型；请先使用 Index-TTS 跑通生成。';
     }
   } catch {
-    apiStatus.textContent = '请通过 Node 后端打开页面';
-    apiStatus.classList.remove('ok');
+    if (apiStatus) apiStatus.hidden = true;
+    if (modelStatusHint) modelStatusHint.hidden = true;
   }
 }
 
@@ -181,19 +194,34 @@ function renderGenerations() {
   for (const gen of generations) {
     const item = document.createElement('div');
     item.className = 'list-item';
+    const fileName = gen.mp3File || gen.wavFile || gen.id || '生成音频';
     item.innerHTML = `
       <div class="list-main">
-        <strong> ·  · ${new Date(gen.createdAt).toLocaleString()}</strong>
-        <span>${escapeHtml((gen.text || '').slice(0, 120))}${(gen.text || '').length > 120 ? '...' : ''}</span>
+        <strong>${escapeHtml(fileName)}</strong>
+        <span>${new Date(gen.createdAt).toLocaleString()}</span>
         <audio controls src="${gen.audioMp3Url || gen.audioUrl}"></audio>
       </div>
       <div class="list-actions">
         <a class="btn primary" href="${gen.audioMp3Url || gen.audioUrl}" download>下载MP3</a>
-        <a class="btn" href="${gen.audioWavUrl}" download>下载WAV</a>
+        <button class="btn danger" type="button" data-delete-generation="${gen.id}">删除</button>
       </div>
     `;
     generationHistory.append(item);
   }
+  generationHistory.querySelectorAll('[data-delete-generation]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.deleteGeneration;
+      const gen = generations.find(item => item.id === id);
+      if (!confirm(`确定删除生成文件“${gen?.mp3File || gen?.wavFile || id}”吗？`)) return;
+      try {
+        await apiJson(`/api/generations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        await loadGenerations();
+        showResult('生成记录已删除。');
+      } catch (error) {
+        showResult(`删除失败：${error.message}`, true);
+      }
+    });
+  });
 }
 
 function useSavedSample(id) {
@@ -349,7 +377,7 @@ compareModelsBtn.addEventListener('click', async () => {
     const uploadName = currentSampleFile.name || (currentSampleFile.type?.includes('mp3') || currentSampleFile.type?.includes('mpeg') ? 'recording.mp3' : 'recording.webm');
     formData.append('sample', currentSampleFile, uploadName);
   }
-  showResult('正在依次生成 GPT-SoVITS、CosyVoice2、Index-TTS，请稍等……');
+  showResult('稳定模式下三模型对比暂不可用，当前请使用 Index-TTS 生成。');
   try {
     const res = await fetch('/api/compare-models', { method: 'POST', body: formData });
     const data = await res.json();
@@ -403,26 +431,12 @@ form.addEventListener('submit', async event => {
   }
 });
 
-const startBtn = document.createElement('button');
-startBtn.type = 'button';
-startBtn.className = 'btn';
-startBtn.textContent = '启动原版 Index-TTS WebUI';
-startBtn.addEventListener('click', async () => {
-  try {
-    const data = await apiJson('/api/local-tts/start', { method: 'POST' });
-    showResult(data.message || '已尝试启动原版 Index-TTS WebUI。');
-  } catch (error) {
-    showResult(`启动失败：${error.message}`, true);
-  }
-});
-apiStatus.after(startBtn);
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
-}
 
 refreshStatus();
 loadSamples();
 loadGenerations();
+
+
 
 

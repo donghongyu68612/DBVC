@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -24,7 +24,7 @@ function readConfig() {
     ffmpegExe: 'D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\ffmpeg\\ffmpeg.exe',
     localTtsExe: 'D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe',
     defaultMode: 'normal',
-    defaultModel: 'gpt-sovits',
+    defaultModel: 'index-tts',
     gptSovits: { enabled: false, baseUrl: 'http://127.0.0.1:9880', endpoint: '/tts', textLang: 'zh', promptLang: 'zh' },
     cosyVoice2: { enabled: false, baseUrl: 'http://127.0.0.1:50000', endpoint: '/inference_zero_shot' }
   };
@@ -60,6 +60,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/samples/rename') return renameSampleEndpoint(req, res);
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/samples/')) return deleteSampleEndpoint(url, res);
     if (req.method === 'GET' && url.pathname === '/api/generations') return listGenerations(res);
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/generations/')) return deleteGenerationEndpoint(url, res);
     if (req.method === 'POST' && url.pathname === '/api/compare-models') return handleCompareModels(req, res);
     if (req.method === 'POST' && url.pathname === '/api/voice-clone') return handleVoiceClone(req, res);
 
@@ -95,6 +96,22 @@ function listGenerations(res) {
   const db = loadDb();
   return json(res, 200, { ok: true, generations: db.generations.map(generationWithUrls).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))) });
 }
+
+function deleteGenerationEndpoint(url, res) {
+  const id = decodeURIComponent(url.pathname.split('/').pop() || '');
+  const db = loadDb();
+  const idx = db.generations.findIndex(g => g.id === id);
+  if (idx === -1) return json(res, 404, { ok: false, error: '找不到生成记录。' });
+  const [generation] = db.generations.splice(idx, 1);
+  for (const file of [generation.mp3File, generation.wavFile]) {
+    if (!file) continue;
+    const p = path.join(generatedDir, file);
+    if (fs.existsSync(p)) fs.rmSync(p, { force: true });
+  }
+  saveDb(db);
+  return json(res, 200, { ok: true });
+}
+
 
 async function saveSampleEndpoint(req, res) {
   const contentType = req.headers['content-type'] || '';
@@ -368,9 +385,9 @@ async function getModelStatus(config) {
   const cosyProbe = cosyConfigured ? await probeHttp(`${String(config.cosyVoice2.baseUrl).replace(/\/$/, '')}`) : { online: false };
   const indexProbe = await probeHttp('http://127.0.0.1:7860');
   return [
-    { id: 'gpt-sovits', name: modelDisplayName('gpt-sovits'), order: 1, localOnly: true, configured: gptConfigured, online: !!gptProbe.online, baseUrl: config.gptSovits?.baseUrl || '', note: '需本地启动 GPT-SoVITS API，默认 http://127.0.0.1:9880/tts' },
-    { id: 'cosyvoice2', name: modelDisplayName('cosyvoice2'), order: 2, localOnly: true, configured: cosyConfigured, online: !!cosyProbe.online, baseUrl: config.cosyVoice2?.baseUrl || '', note: '需本地启动 CosyVoice2 API，默认 http://127.0.0.1:50000/inference_zero_shot' },
-    { id: 'index-tts', name: modelDisplayName('index-tts'), order: 3, localOnly: true, configured: indexConfigured, online: !!indexProbe.online, baseUrl: 'http://127.0.0.1:7860', note: '当前已接入的本地 Index-TTS 直连模型' }
+    { id: 'gpt-sovits', name: modelDisplayName('gpt-sovits'), order: 1, localOnly: true, configured: gptConfigured, online: !!gptProbe.online, baseUrl: config.gptSovits?.baseUrl || '', note: '实验中/暂不可用：当前 torchcodec 依赖的 FFmpeg DLL 未满足，暂不作为默认生成模型' },
+    { id: 'cosyvoice2', name: modelDisplayName('cosyvoice2'), order: 2, localOnly: true, configured: cosyConfigured, online: !!cosyProbe.online, baseUrl: config.cosyVoice2?.baseUrl || '', note: '实验中/暂不可用：当前 50000 服务未启动，暂不作为默认生成模型' },
+    { id: 'index-tts', name: modelDisplayName('index-tts'), order: 3, localOnly: true, configured: indexConfigured, online: !!indexProbe.online, baseUrl: 'http://127.0.0.1:7860', note: '稳定模式默认模型：当前用于生成声音' }
   ];
 }
 
@@ -519,4 +536,5 @@ server.listen(port, '127.0.0.1', () => {
   console.log(`Voice clone web app: http://127.0.0.1:${port}`);
   console.log(`Using Index-TTS root: ${readConfig().indexRoot}`);
 });
+
 

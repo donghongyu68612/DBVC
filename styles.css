@@ -86,3 +86,13 @@ input[type="text"]:focus { border-color: var(--accent-2); }
 .list-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .list-actions a { text-decoration: none; }
 @media (max-width: 820px) { .list-item { grid-template-columns: 1fr; } .list-actions { justify-content: flex-start; } }
+
+/* 本地TTS模型下拉菜单：黑字，其余不变 */
+#modelSelect {
+  color: #111;
+  background: #fff;
+}
+#modelSelect option {
+  color: #111;
+  background: #fff;
+}
