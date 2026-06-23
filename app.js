@@ -231,7 +231,7 @@ function useSavedSample(id) {
   const promptInput = $('#promptText');
   if (promptInput) {
     promptInput.value = '';
-    promptInput.placeholder = '这里填声音样本音频里实际说的话，不是要生成的朗读文案。';
+    promptInput.placeholder = '可不填；不填会优先保证朗读文本正确，填写准确样本原文会更像原声。';
   }
 
   showResult(`已选择声音样本：${sample.name}`);
@@ -362,7 +362,6 @@ form.addEventListener('submit', async event => {
   const consent = $('#consent').checked;
   if (!consent) return showResult('请先确认你拥有该声音的授权。', true);
   if (!text) return showResult('请输入要生成的朗读文本。', true);
-  if ($('#modelSelect').value === 'cosyvoice2' && !$('#promptText').value.trim()) return showResult('CosyVoice2 需要填写“样本原文”：也就是声音样本音频里实际说的话，不是朗读文本。', true);
   if (!selectedSavedSampleId && !currentSampleFile) return showResult('请选择已保存样本，或录制/上传一个新样本。', true);
 
   const formData = new FormData();

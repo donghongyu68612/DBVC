@@ -239,7 +239,6 @@ async function generateVoiceFromParsed(req, forCompare = false) {
 
   if (consentConfirmed !== 'true') return json(res, 400, { ok: false, error: '必须确认声音授权。' });
   if (!text) return json(res, 400, { ok: false, error: '缺少朗读文本。' });
-  if (model === 'cosyvoice2' && !promptText) return json(res, 400, { ok: false, error: 'CosyVoice2 需要填写“样本原文”：也就是声音样本音频里实际说的话，不是朗读文本。' });
 
   const checks = checkLocalIndexTts(config);
   if (!checks.ready) return json(res, 503, { ok: false, error: '本地 Index-TTS 环境不完整。', checks });
@@ -292,8 +291,7 @@ async function generateVoiceFromParsed(req, forCompare = false) {
       wavFile: path.basename(result.output || wavOutputPath),
       mp3Path: mp3OutputPath,
       wavPath: result.output || wavOutputPath,
-      elapsedSeconds: result.elapsedSeconds,
-      segments: result.segments || 1
+      elapsedSeconds: result.elapsedSeconds
     };
     const db = loadDb();
     db.generations.unshift(generation);
@@ -467,118 +465,24 @@ async function ensureCosyRefAudioDuration(config, samplePath) {
 }
 
 
-function splitCosyVoiceText(text, maxChars = 14) {
-  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!normalized) return [];
-  const tokens = normalized.match(/[^。！？!?；;，,、：:\n]+[。！？!?；;，,、：:]?|[^。！？!?；;，,、：:\n]+$/g) || [normalized];
-  const chunks = [];
-  let current = '';
-  for (const raw of tokens) {
-    const part = raw.trim();
-    if (!part) continue;
-    if ((current + part).length <= maxChars) {
-      current += part;
-      continue;
-    }
-    if (current) chunks.push(current);
-    if (part.length <= maxChars) {
-      current = part;
-    } else {
-      for (let i = 0; i < part.length; i += maxChars) chunks.push(part.slice(i, i + maxChars));
-      current = '';
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks;
-}
-
-function createSilenceAudio(config, outputPath, duration = '0.35') {
-  return new Promise((resolve, reject) => {
-    const args = ['-y', '-f', 'lavfi', '-i', `anullsrc=r=24000:cl=mono`, '-t', duration, '-acodec', 'pcm_s16le', '-ar', '24000', '-ac', '1', outputPath];
-    const child = spawn(config.ffmpegExe, args, { windowsHide: true });
-    let stdout = '', stderr = '';
-    child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
-    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
-    child.on('error', err => { err.log = stderr || stdout; reject(err); });
-    child.on('close', code => {
-      if (code !== 0 || !fs.existsSync(outputPath)) {
-        const err = new Error(`ffmpeg silence exited with code ${code}`);
-        err.log = `${stdout}\n${stderr}`.trim();
-        reject(err); return;
-      }
-      resolve(outputPath);
-    });
-  });
-}
-
-function concatAudioFiles(config, inputPaths, outputPath) {
-  return new Promise((resolve, reject) => {
-    const listPath = outputPath.replace(/\.wav$/i, '_concat.txt');
-    const list = inputPaths.map(file => `file '${file.replace(/'/g, "'\\''")}'`).join('\n');
-    fs.writeFileSync(listPath, list, 'utf8');
-    const args = ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-af', 'aresample=24000', '-acodec', 'pcm_s16le', '-ar', '24000', '-ac', '1', outputPath];
-    const child = spawn(config.ffmpegExe, args, { windowsHide: true });
-    let stdout = '', stderr = '';
-    child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
-    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
-    child.on('error', err => { try { fs.rmSync(listPath, { force: true }); } catch {} err.log = stderr || stdout; reject(err); });
-    child.on('close', code => {
-      try { fs.rmSync(listPath, { force: true }); } catch {}
-      if (code !== 0 || !fs.existsSync(outputPath)) {
-        const err = new Error(`ffmpeg concat exited with code ${code}`);
-        err.log = `${stdout}\n${stderr}`.trim();
-        reject(err); return;
-      }
-      resolve(outputPath);
-    });
-  });
-}
-
-async function requestCosyVoice2Segment({ endpoint, modelConfig, text, promptText, refPath, outputPath }) {
-  const body = { tts_text: text, prompt_text: promptText || '', prompt_wav_path: refPath, output_format: 'wav' };
-  console.log('[CosyVoice2] segment tts_text=', text.slice(0, 120));
-  const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  await saveLocalModelAudioResponse(response, outputPath, modelConfig.baseUrl);
-  return outputPath;
-}
-
 async function runCosyVoice2LocalApi({ config, samplePath, text, promptText, outputPath }) {
   const modelConfig = config.cosyVoice2 || {};
-  if (!modelConfig.enabled) throw new Error('CosyVoice2 未启用。');
+  if (!modelConfig.enabled) throw new Error('CosyVoice2 未启用。请本地部署 CosyVoice2 API，并在 config.local.json 里把 cosyVoice2.enabled 改为 true。');
   if (!isLocalBaseUrl(modelConfig.baseUrl || '')) throw new Error('CosyVoice2 只允许配置本地地址，例如 http://127.0.0.1:50000。');
-  const endpoint = `${String(modelConfig.baseUrl).replace(/\/$/, '')}${modelConfig.endpoint || '/inference_zero_shot'}`;
+  const baseUrl = String(modelConfig.baseUrl).replace(/\/$/, '');
+  const usePromptText = !!String(promptText || '').trim();
+  const endpoint = `${baseUrl}${usePromptText ? (modelConfig.endpoint || '/inference_zero_shot') : '/inference_cross_lingual'}`;
   const started = Date.now();
   const refPath = await ensureCosyRefAudioDuration(config, samplePath);
-  const segments = splitCosyVoiceText(text);
-  if (!segments.length) throw new Error('朗读文本为空。');
+  const body = usePromptText
+    ? { tts_text: text, prompt_text: promptText, prompt_wav_path: refPath, output_format: 'wav' }
+    : { tts_text: text, prompt_wav_path: refPath, output_format: 'wav' };
+  console.log('[CosyVoice2] mode=', usePromptText ? 'zero_shot_with_sample_text' : 'audio_only_cross_lingual');
+  console.log('[CosyVoice2] tts_text=', text.slice(0, 120));
   console.log('[CosyVoice2] prompt_text=', (promptText || '').slice(0, 120));
-  console.log(`[CosyVoice2] split into ${segments.length} segment(s)`);
-
-  if (segments.length === 1) {
-    await requestCosyVoice2Segment({ endpoint, modelConfig, text: segments[0], promptText, refPath, outputPath });
-    return { ok: true, output: outputPath, elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)), segments: 1 };
-  }
-
-  const partPaths = [];
-  const concatPaths = [];
-  try {
-    const silencePath = outputPath.replace(/\.wav$/i, '_silence.wav');
-    await createSilenceAudio(config, silencePath);
-    for (let i = 0; i < segments.length; i++) {
-      const partPath = outputPath.replace(/\.wav$/i, `_part_${String(i + 1).padStart(2, '0')}.wav`);
-      partPaths.push(partPath);
-      await requestCosyVoice2Segment({ endpoint, modelConfig, text: segments[i], promptText, refPath, outputPath: partPath });
-      concatPaths.push(partPath);
-      if (i < segments.length - 1) concatPaths.push(silencePath);
-    }
-    await concatAudioFiles(config, concatPaths, outputPath);
-    try { fs.rmSync(silencePath, { force: true }); } catch {}
-  } finally {
-    for (const partPath of partPaths) {
-      try { fs.rmSync(partPath, { force: true }); } catch {}
-    }
-  }
-  return { ok: true, output: outputPath, elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)), segments: segments.length };
+  const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  await saveLocalModelAudioResponse(response, outputPath, modelConfig.baseUrl);
+  return { ok: true, output: outputPath, elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)) };
 }
 
 async function saveLocalModelAudioResponse(response, outputPath, baseUrl) {

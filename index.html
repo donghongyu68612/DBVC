@@ -78,7 +78,7 @@
           </div>
         </div>
 
-        <label class="field"><span>本地TTS模型</span><select id="modelSelect" name="model"><option value="index-tts">Index-TTS 模型</option><option value="cosyvoice2" selected>CosyVoice2 中文情感模型（可用）</option></select></label><label class="field"><span>样本原文 <b style="color:#88f">（不是朗读内容）</b></span><input id="promptText" name="promptText" type="text" placeholder="【CosyVoice2必填】这里填“声音样本音频里实际说的话”，不是要生成的朗读文案。例如样本录音说“你好我是小明”，这里就只填“你好我是小明”" /></label><label class="field"><span>朗读文本 <b style="color:#7bd88f">（最终生成语音会读这里）</b></span>
+        <label class="field"><span>本地TTS模型</span><select id="modelSelect" name="model"><option value="index-tts">Index-TTS 模型</option><option value="cosyvoice2" selected>CosyVoice2 中文情感模型（可用）</option></select></label><label class="field"><span>样本原文 <b style="color:#88f">（可不填）</b></span><input id="promptText" name="promptText" type="text" placeholder="可不填；不填会优先保证朗读文本正确。若想更像原声，请填写声音样本里实际说的话，必须和录音一致。" /></label><label class="field"><span>朗读文本 <b style="color:#7bd88f">（最终生成语音会读这里）</b></span>
           <textarea id="scriptText" name="scriptText" rows="8" maxlength="1000" placeholder="例如：你好，这是我用自己的声音生成的一段测试语音。"></textarea>
         </label>
 
