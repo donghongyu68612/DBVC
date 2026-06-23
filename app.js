@@ -1,4 +1,4 @@
-﻿const $ = selector => document.querySelector(selector);
+const $ = selector => document.querySelector(selector);
 
 const recordBtn = $('#recordBtn');
 const stopBtn = $('#stopBtn');
@@ -153,8 +153,8 @@ function renderSamples() {
   sampleLibrary.querySelectorAll('[data-use]').forEach(btn => {
     btn.addEventListener('click', () => useSavedSample(btn.dataset.use));
   });
-}
 
+}
 
 
 function renderComparisonResults(items) {
@@ -228,6 +228,12 @@ function useSavedSample(id) {
   preview.src = sample.mp3Url;
   preview.hidden = false;
   sampleName.textContent = `当前使用已保存样本：${sample.name}`;
+  const promptInput = $('#promptText');
+  if (promptInput) {
+    promptInput.value = '';
+    promptInput.placeholder = '这里填声音样本音频里实际说的话，不是要生成的朗读文案。';
+  }
+
   showResult(`已选择声音样本：${sample.name}`);
 }
 
@@ -350,13 +356,13 @@ form.addEventListener('reset', () => {
 });
 
 
-
 form.addEventListener('submit', async event => {
   event.preventDefault();
   const text = $('#scriptText').value.trim();
   const consent = $('#consent').checked;
   if (!consent) return showResult('请先确认你拥有该声音的授权。', true);
   if (!text) return showResult('请输入要生成的朗读文本。', true);
+  if ($('#modelSelect').value === 'cosyvoice2' && !$('#promptText').value.trim()) return showResult('CosyVoice2 需要填写“样本原文”：也就是声音样本音频里实际说的话，不是朗读文本。', true);
   if (!selectedSavedSampleId && !currentSampleFile) return showResult('请选择已保存样本，或录制/上传一个新样本。', true);
 
   const formData = new FormData();
@@ -373,7 +379,7 @@ form.addEventListener('submit', async event => {
     formData.append('sample', currentSampleFile, uploadName);
   }
 
-  showResult('正在生成语音并保存到本地历史，请稍等……');
+  showResult(`正在生成语音并保存到本地历史，请稍等……\n朗读文本：${text.slice(0, 80)}${text.length > 80 ? '…' : ''}`);
   try {
     const data = await apiJson('/api/voice-clone', { method: 'POST', body: formData });
     const box = document.createElement('div');
@@ -394,14 +400,6 @@ form.addEventListener('submit', async event => {
 });
 
 
-
 refreshStatus();
 loadSamples();
 loadGenerations();
-
-
-
-
-
-
-

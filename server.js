@@ -239,6 +239,7 @@ async function generateVoiceFromParsed(req, forCompare = false) {
 
   if (consentConfirmed !== 'true') return json(res, 400, { ok: false, error: '必须确认声音授权。' });
   if (!text) return json(res, 400, { ok: false, error: '缺少朗读文本。' });
+  if (model === 'cosyvoice2' && !promptText) return json(res, 400, { ok: false, error: 'CosyVoice2 需要填写“样本原文”：也就是声音样本音频里实际说的话，不是朗读文本。' });
 
   const checks = checkLocalIndexTts(config);
   if (!checks.ready) return json(res, 503, { ok: false, error: '本地 Index-TTS 环境不完整。', checks });
@@ -473,6 +474,8 @@ async function runCosyVoice2LocalApi({ config, samplePath, text, promptText, out
   const started = Date.now();
   const refPath = await ensureCosyRefAudioDuration(config, samplePath);
   const body = { tts_text: text, prompt_text: promptText || '', prompt_wav_path: refPath, output_format: 'wav' };
+  console.log('[CosyVoice2] tts_text=', text.slice(0, 120));
+  console.log('[CosyVoice2] prompt_text=', (promptText || '').slice(0, 120));
   const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   await saveLocalModelAudioResponse(response, outputPath, modelConfig.baseUrl);
   return { ok: true, output: outputPath, elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)) };
