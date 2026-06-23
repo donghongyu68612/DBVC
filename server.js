@@ -239,6 +239,7 @@ async function generateVoiceFromParsed(req, forCompare = false) {
 
   if (consentConfirmed !== 'true') return json(res, 400, { ok: false, error: '必须确认声音授权。' });
   if (!text) return json(res, 400, { ok: false, error: '缺少朗读文本。' });
+  if (model === 'cosyvoice2' && !promptText) return json(res, 400, { ok: false, error: 'CosyVoice2 需要填写“样本原文”：也就是声音样本音频里实际说的话，不是朗读文本。' });
 
   const checks = checkLocalIndexTts(config);
   if (!checks.ready) return json(res, 503, { ok: false, error: '本地 Index-TTS 环境不完整。', checks });
@@ -469,15 +470,10 @@ async function runCosyVoice2LocalApi({ config, samplePath, text, promptText, out
   const modelConfig = config.cosyVoice2 || {};
   if (!modelConfig.enabled) throw new Error('CosyVoice2 未启用。请本地部署 CosyVoice2 API，并在 config.local.json 里把 cosyVoice2.enabled 改为 true。');
   if (!isLocalBaseUrl(modelConfig.baseUrl || '')) throw new Error('CosyVoice2 只允许配置本地地址，例如 http://127.0.0.1:50000。');
-  const baseUrl = String(modelConfig.baseUrl).replace(/\/$/, '');
-  const usePromptText = !!String(promptText || '').trim();
-  const endpoint = `${baseUrl}${usePromptText ? (modelConfig.endpoint || '/inference_zero_shot') : '/inference_cross_lingual'}`;
+  const endpoint = `${String(modelConfig.baseUrl).replace(/\/$/, '')}${modelConfig.endpoint || '/inference_zero_shot'}`;
   const started = Date.now();
   const refPath = await ensureCosyRefAudioDuration(config, samplePath);
-  const body = usePromptText
-    ? { tts_text: text, prompt_text: promptText, prompt_wav_path: refPath, output_format: 'wav' }
-    : { tts_text: text, prompt_wav_path: refPath, output_format: 'wav' };
-  console.log('[CosyVoice2] mode=', usePromptText ? 'zero_shot_with_sample_text' : 'audio_only_cross_lingual');
+  const body = { tts_text: text, prompt_text: promptText || '', prompt_wav_path: refPath, output_format: 'wav' };
   console.log('[CosyVoice2] tts_text=', text.slice(0, 120));
   console.log('[CosyVoice2] prompt_text=', (promptText || '').slice(0, 120));
   const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
