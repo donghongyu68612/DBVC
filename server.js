@@ -467,7 +467,7 @@ async function ensureCosyRefAudioDuration(config, samplePath) {
 }
 
 
-function splitCosyVoiceText(text, maxChars = 55) {
+function splitCosyVoiceText(text, maxChars = 14) {
   const normalized = String(text || '').replace(/\s+/g, ' ').trim();
   if (!normalized) return [];
   const tokens = normalized.match(/[^。！？!?；;，,、：:\n]+[。！？!?；;，,、：:]?|[^。！？!?；;，,、：:\n]+$/g) || [normalized];
@@ -492,12 +492,31 @@ function splitCosyVoiceText(text, maxChars = 55) {
   return chunks;
 }
 
+function createSilenceAudio(config, outputPath, duration = '0.35') {
+  return new Promise((resolve, reject) => {
+    const args = ['-y', '-f', 'lavfi', '-i', `anullsrc=r=24000:cl=mono`, '-t', duration, '-acodec', 'pcm_s16le', '-ar', '24000', '-ac', '1', outputPath];
+    const child = spawn(config.ffmpegExe, args, { windowsHide: true });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
+    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+    child.on('error', err => { err.log = stderr || stdout; reject(err); });
+    child.on('close', code => {
+      if (code !== 0 || !fs.existsSync(outputPath)) {
+        const err = new Error(`ffmpeg silence exited with code ${code}`);
+        err.log = `${stdout}\n${stderr}`.trim();
+        reject(err); return;
+      }
+      resolve(outputPath);
+    });
+  });
+}
+
 function concatAudioFiles(config, inputPaths, outputPath) {
   return new Promise((resolve, reject) => {
     const listPath = outputPath.replace(/\.wav$/i, '_concat.txt');
     const list = inputPaths.map(file => `file '${file.replace(/'/g, "'\\''")}'`).join('\n');
     fs.writeFileSync(listPath, list, 'utf8');
-    const args = ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outputPath];
+    const args = ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-af', 'aresample=24000', '-acodec', 'pcm_s16le', '-ar', '24000', '-ac', '1', outputPath];
     const child = spawn(config.ffmpegExe, args, { windowsHide: true });
     let stdout = '', stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
@@ -541,13 +560,19 @@ async function runCosyVoice2LocalApi({ config, samplePath, text, promptText, out
   }
 
   const partPaths = [];
+  const concatPaths = [];
   try {
+    const silencePath = outputPath.replace(/\.wav$/i, '_silence.wav');
+    await createSilenceAudio(config, silencePath);
     for (let i = 0; i < segments.length; i++) {
       const partPath = outputPath.replace(/\.wav$/i, `_part_${String(i + 1).padStart(2, '0')}.wav`);
       partPaths.push(partPath);
       await requestCosyVoice2Segment({ endpoint, modelConfig, text: segments[i], promptText, refPath, outputPath: partPath });
+      concatPaths.push(partPath);
+      if (i < segments.length - 1) concatPaths.push(silencePath);
     }
-    await concatAudioFiles(config, partPaths, outputPath);
+    await concatAudioFiles(config, concatPaths, outputPath);
+    try { fs.rmSync(silencePath, { force: true }); } catch {}
   } finally {
     for (const partPath of partPaths) {
       try { fs.rmSync(partPath, { force: true }); } catch {}
