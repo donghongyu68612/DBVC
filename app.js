@@ -83,20 +83,14 @@ async function apiJson(url, options) {
 async function refreshStatus() {
   try {
     const data = await apiJson('/api/local-tts/status');
-    if (modelSelect && data.config?.defaultModel) modelSelect.value = data.config.defaultModel;
+    if (modelSelect) modelSelect.value = 'cosyvoice2';
     for (const option of modelSelect?.options || []) {
       const m = (data.models || []).find(item => item.id === option.value);
-      option.disabled = option.value !== 'index-tts' && (!m?.configured || !m?.online);
-      if (option.value === 'index-tts') option.textContent = 'Index-TTS 当前模型';
-      if (option.value === 'gpt-sovits') option.textContent = 'GPT-SoVITS（实验中 / 暂不可用）';
-      if (option.value === 'cosyvoice2') option.textContent = 'CosyVoice2（实验中 / 暂不可用）';
+      if (option.value === 'index-tts') option.textContent = 'Index-TTS 模型' + (m?.online ? '（可用）' : '（不可用）');
+      if (option.value === 'cosyvoice2') option.textContent = 'CosyVoice2 中文情感模型' + (m?.online ? '（可用）' : '（不可用）');
     }
     if (modelStatusHint) modelStatusHint.hidden = true;
     if (apiStatus) apiStatus.hidden = true;
-    if (compareModelsBtn) {
-      compareModelsBtn.disabled = true;
-      compareModelsBtn.title = '稳定模式下暂不对比三模型；请先使用 Index-TTS 跑通生成。';
-    }
   } catch {
     if (apiStatus) apiStatus.hidden = true;
     if (modelStatusHint) modelStatusHint.hidden = true;
@@ -202,7 +196,6 @@ function renderGenerations() {
         <audio controls src="${gen.audioMp3Url || gen.audioUrl}"></audio>
       </div>
       <div class="list-actions">
-        <a class="btn primary" href="${gen.audioMp3Url || gen.audioUrl}" download>下载MP3</a>
         <button class="btn danger" type="button" data-delete-generation="${gen.id}">删除</button>
       </div>
     `;
@@ -358,37 +351,6 @@ form.addEventListener('reset', () => {
 
 
 
-compareModelsBtn.addEventListener('click', async () => {
-  const text = $('#scriptText').value.trim();
-  const consent = $('#consent').checked;
-  if (!consent) return showResult('请先确认你拥有该声音的授权。', true);
-  if (!text) return showResult('请输入要生成的朗读文本。', true);
-  if (!selectedSavedSampleId && !currentSampleFile) return showResult('请选择已保存样本，或录制/上传一个新样本。', true);
-
-  const formData = new FormData();
-  formData.append('text', text);
-  formData.append('promptText', $('#promptText').value.trim());
-  formData.append('style', $('#style').value);
-  formData.append('speed', $('#speed').value);
-  formData.append('consentConfirmed', 'true');
-  if (selectedSavedSampleId) {
-    formData.append('sampleId', selectedSavedSampleId);
-  } else {
-    const uploadName = currentSampleFile.name || (currentSampleFile.type?.includes('mp3') || currentSampleFile.type?.includes('mpeg') ? 'recording.mp3' : 'recording.webm');
-    formData.append('sample', currentSampleFile, uploadName);
-  }
-  showResult('稳定模式下三模型对比暂不可用，当前请使用 Index-TTS 生成。');
-  try {
-    const res = await fetch('/api/compare-models', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (!res.ok || data.ok === false) throw new Error(data.error || data.detail || '对比生成失败');
-    showResult('三模型对比生成完成。', false, renderComparisonResults(data.results || []));
-    await loadGenerations();
-  } catch (error) {
-    showResult(`对比生成失败：${error.message}`, true);
-  }
-});
-
 form.addEventListener('submit', async event => {
   event.preventDefault();
   const text = $('#scriptText').value.trim();
@@ -436,6 +398,9 @@ form.addEventListener('submit', async event => {
 refreshStatus();
 loadSamples();
 loadGenerations();
+
+
+
 
 
 

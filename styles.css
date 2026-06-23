@@ -87,12 +87,16 @@ input[type="text"]:focus { border-color: var(--accent-2); }
 .list-actions a { text-decoration: none; }
 @media (max-width: 820px) { .list-item { grid-template-columns: 1fr; } .list-actions { justify-content: flex-start; } }
 
-/* 本地TTS模型下拉菜单：黑字，其余不变 */
+/* 声音样本/模型下拉菜单统一深色风格 */
+#savedSampleSelect,
 #modelSelect {
-  color: #111;
-  background: #fff;
+  color: #eef4ff;
+  background: #181a20;
+  border-color: rgba(255,255,255,.28);
 }
+#savedSampleSelect option,
 #modelSelect option {
   color: #111;
   background: #fff;
 }
+

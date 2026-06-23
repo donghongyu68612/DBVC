@@ -1,24 +1,24 @@
-﻿{
-    "modelRoot":  "E:\\DBVC\\Models",
-    "indexRoot":  "D:\\Index-TTS-V3\\Index-TTS-V3",
-    "pythonExe":  "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\python.exe",
-    "ffmpegExe":  "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\ffmpeg\\ffmpeg.exe",
-    "localTtsExe":  "D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe",
-    "defaultMode":  "normal",
-    "defaultModel":  "index-tts",
-    "gptSovits":  {
-                      "enabled":  false,
-                      "root":  "E:\\DBVC\\Models\\GPT-SoVITS",
-                      "baseUrl":  "http://127.0.0.1:9880",
-                      "endpoint":  "/tts",
-                      "textLang":  "zh",
-                      "promptLang":  "zh"
-                  },
-    "cosyVoice2":  {
-                       "enabled":  false,
-                       "root":  "E:\\DBVC\\Models\\CosyVoice",
-                       "baseUrl":  "http://127.0.0.1:50000",
-                       "endpoint":  "/inference_zero_shot"
-                   },
-    "notes":  "稳定模式：默认只启用 Index-TTS。GPT-SoVITS 因 torchcodec/FFmpeg DLL 依赖未满足，CosyVoice2 当前未启动，均保留入口但标记为实验中/暂不可用。"
+{
+    "modelRoot": "E:\\DBVC\\Models",
+    "indexRoot": "D:\\Index-TTS-V3\\Index-TTS-V3",
+    "pythonExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\python.exe",
+    "ffmpegExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\ffmpeg\\ffmpeg.exe",
+    "localTtsExe": "D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe",
+    "defaultMode": "normal",
+    "defaultModel": "cosyvoice2",
+    "gptSovits": {
+        "enabled": false,
+        "root": "E:\\DBVC\\Models\\GPT-SoVITS",
+        "baseUrl": "http://127.0.0.1:9880",
+        "endpoint": "/tts",
+        "textLang": "zh",
+        "promptLang": "zh"
+    },
+    "cosyVoice2": {
+        "enabled": true,
+        "root": "E:\\DBVC\\Models\\CosyVoice",
+        "baseUrl": "http://127.0.0.1:50000",
+        "endpoint": "/inference_zero_shot"
+    },
+    "notes": "GPT-SoVITS 已移除。Index-TTS / CosyVoice2 在线可用。"
 }

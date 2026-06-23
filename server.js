@@ -24,8 +24,7 @@ function readConfig() {
     ffmpegExe: 'D:\\Index-TTS-V3\\Index-TTS-V3\\deepface\\ffmpeg\\ffmpeg.exe',
     localTtsExe: 'D:\\Index-TTS-V3\\Index-TTS-V3\\一键启动.exe',
     defaultMode: 'normal',
-    defaultModel: 'index-tts',
-    gptSovits: { enabled: false, baseUrl: 'http://127.0.0.1:9880', endpoint: '/tts', textLang: 'zh', promptLang: 'zh' },
+    defaultModel: 'cosyvoice2',
     cosyVoice2: { enabled: false, baseUrl: 'http://127.0.0.1:50000', endpoint: '/inference_zero_shot' }
   };
   try { return { ...fallback, ...JSON.parse(fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '')) }; }
@@ -210,7 +209,7 @@ async function parseVoiceCloneRequest(req) {
 async function handleCompareModels(req, res) {
   try {
     const parsed = await parseVoiceCloneRequest(req);
-    const models = ['gpt-sovits', 'cosyvoice2', 'index-tts'];
+    const models = ['cosyvoice2', 'index-tts'];
     const results = [];
     for (const model of models) {
       const fakeReq = { headers: req.headers };
@@ -345,15 +344,14 @@ function convertAudio(config, inputPath, outputPath, args) {
 
 
 function normalizeModelId(model) {
-  if (['gpt-sovits', 'cosyvoice2', 'index-tts'].includes(model)) return model;
+  if (['cosyvoice2', 'index-tts'].includes(model)) return model;
   return 'index-tts';
 }
 
 function modelDisplayName(model) {
   return {
-    'gpt-sovits': 'GPT-SoVITS 个人音色模型',
     'cosyvoice2': 'CosyVoice2 中文情感模型',
-    'index-tts': 'Index-TTS 当前模型'
+    'index-tts': 'Index-TTS 模型'
   }[model] || model;
 }
 
@@ -378,36 +376,94 @@ async function probeHttp(url) {
   }
 }
 async function getModelStatus(config) {
-  const gptConfigured = !!config.gptSovits?.enabled && isLocalBaseUrl(config.gptSovits?.baseUrl || '');
   const cosyConfigured = !!config.cosyVoice2?.enabled && isLocalBaseUrl(config.cosyVoice2?.baseUrl || '');
   const indexConfigured = checkLocalIndexTts(config).ready;
-  const gptProbe = gptConfigured ? await probeHttp(`${String(config.gptSovits.baseUrl).replace(/\/$/, '')}/docs`) : { online: false };
   const cosyProbe = cosyConfigured ? await probeHttp(`${String(config.cosyVoice2.baseUrl).replace(/\/$/, '')}`) : { online: false };
-  const indexProbe = await probeHttp('http://127.0.0.1:7860');
+  const indexProbe = { online: indexConfigured }; // Index-TTS works via bridge, not web server
   return [
-    { id: 'gpt-sovits', name: modelDisplayName('gpt-sovits'), order: 1, localOnly: true, configured: gptConfigured, online: !!gptProbe.online, baseUrl: config.gptSovits?.baseUrl || '', note: '实验中/暂不可用：当前 torchcodec 依赖的 FFmpeg DLL 未满足，暂不作为默认生成模型' },
-    { id: 'cosyvoice2', name: modelDisplayName('cosyvoice2'), order: 2, localOnly: true, configured: cosyConfigured, online: !!cosyProbe.online, baseUrl: config.cosyVoice2?.baseUrl || '', note: '实验中/暂不可用：当前 50000 服务未启动，暂不作为默认生成模型' },
-    { id: 'index-tts', name: modelDisplayName('index-tts'), order: 3, localOnly: true, configured: indexConfigured, online: !!indexProbe.online, baseUrl: 'http://127.0.0.1:7860', note: '稳定模式默认模型：当前用于生成声音' }
+    { id: 'cosyvoice2', name: modelDisplayName('cosyvoice2'), order: 1, localOnly: true, configured: cosyConfigured, online: !!cosyProbe.online, baseUrl: config.cosyVoice2?.baseUrl || '', note: 'CosyVoice2 中文情感模型' },
+    { id: 'index-tts', name: modelDisplayName('index-tts'), order: 2, localOnly: true, configured: indexConfigured, online: !!indexProbe.online, baseUrl: 'http://127.0.0.1:7860', note: '本地 Index-TTS 直连模型（通过 Python bridge 生成）' }
   ];
 }
 
 async function runSelectedLocalModel({ config, model, samplePath, text, promptText, outputPath, style, speed }) {
-  if (model === 'gpt-sovits') return runGptSovitsLocalApi({ config, samplePath, text, promptText, outputPath });
   if (model === 'cosyvoice2') return runCosyVoice2LocalApi({ config, samplePath, text, promptText, outputPath });
   return runIndexTtsBridge({ config, samplePath, text, outputPath, style, speed });
 }
 
-async function runGptSovitsLocalApi({ config, samplePath, text, promptText, outputPath }) {
-  const modelConfig = config.gptSovits || {};
-  if (!modelConfig.enabled) throw new Error('GPT-SoVITS 未启用。请本地部署 GPT-SoVITS API，并在 config.local.json 里把 gptSovits.enabled 改为 true。');
-  if (!isLocalBaseUrl(modelConfig.baseUrl || '')) throw new Error('GPT-SoVITS 只允许配置本地地址，例如 http://127.0.0.1:9880。');
-  const endpoint = `${String(modelConfig.baseUrl).replace(/\/$/, '')}${modelConfig.endpoint || '/tts'}`;
-  const started = Date.now();
-  const body = { text, text_lang: modelConfig.textLang || 'zh', ref_audio_path: samplePath, prompt_text: promptText || '', prompt_lang: modelConfig.promptLang || 'zh', media_type: 'wav', streaming_mode: false };
-  const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  await saveLocalModelAudioResponse(response, outputPath, modelConfig.baseUrl);
-  return { ok: true, output: outputPath, elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)) };
+
+function getAudioDurationSeconds(config, audioPath) {
+  const ffprobeDir = path.dirname(config.ffmpegExe);
+  const ffprobeExe = path.join(ffprobeDir, 'ffprobe.exe');
+  const exe = fs.existsSync(ffprobeExe) ? ffprobeExe : config.ffmpegExe;
+  const args = fs.existsSync(ffprobeExe)
+    ? ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', audioPath]
+    : ['-i', audioPath];
+  return new Promise((resolve, reject) => {
+    const child = spawn(exe, args, { windowsHide: true });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
+    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+    child.on('error', err => { err.log = stderr; reject(err); });
+    child.on('close', code => {
+      if (code !== 0) { const err = new Error(`ffprobe exited with code ${code}`); err.log = `${stdout}\n${stderr}`.trim(); reject(err); return; }
+      const raw = (stdout || stderr).trim();
+      const dur = parseFloat(raw);
+      if (isNaN(dur) || dur <= 0) { reject(new Error(`Could not determine audio duration from: ${raw.slice(0, 200)}`)); return; }
+      resolve(dur);
+    });
+  });
 }
+
+async function ensureRefAudioDuration(config, samplePath) {
+  const dur = await getAudioDurationSeconds(config, samplePath);
+  if (dur < 3.0) {
+    throw new Error(`参考音频仅 ${dur.toFixed(1)} 秒，模型要求 3~10 秒。请录制/上传一段 3~10 秒的声音样本。`);
+  }
+  if (dur <= 10.0) return samplePath;
+  const start = ((dur - 10) / 2).toFixed(2);
+  const trimmedPath = samplePath.replace(/\.wav$/i, '_trimmed.wav').replace(/\.mp3$/i, '_trimmed.wav');
+  const args = ['-y', '-ss', start, '-i', samplePath, '-t', '10', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', trimmedPath];
+  return new Promise((resolve, reject) => {
+    const child = spawn(config.ffmpegExe, args, { windowsHide: true });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
+    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+    child.on('error', err => { err.log = stderr; reject(err); });
+    child.on('close', code => {
+      if (code !== 0 || !fs.existsSync(trimmedPath)) {
+        const err = new Error(`Unable to trim reference audio to 3-10s, ffmpeg exited with code ${code}`);
+        err.log = `${stdout}\n${stderr}`.trim();
+        reject(err); return;
+      }
+      resolve(trimmedPath);
+    });
+  });
+}
+
+async function ensureCosyRefAudioDuration(config, samplePath) {
+  const dur = await getAudioDurationSeconds(config, samplePath);
+  if (dur <= 30.0) return samplePath;
+  const start = ((dur - 30) / 2).toFixed(2);
+  const trimmedPath = samplePath.replace(/\.wav$/i, '_cosy_trimmed.wav').replace(/\.mp3$/i, '_cosy_trimmed.wav');
+  const args = ['-y', '-ss', start, '-i', samplePath, '-t', '30', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', trimmedPath];
+  return new Promise((resolve, reject) => {
+    const child = spawn(config.ffmpegExe, args, { windowsHide: true });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
+    child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+    child.on('error', err => { err.log = stderr; reject(err); });
+    child.on('close', code => {
+      if (code !== 0 || !fs.existsSync(trimmedPath)) {
+        const err = new Error(`Unable to trim reference audio to 30s, ffmpeg exited with code ${code}`);
+        err.log = `${stdout}\n${stderr}`.trim();
+        reject(err); return;
+      }
+      resolve(trimmedPath);
+    });
+  });
+}
+
 
 async function runCosyVoice2LocalApi({ config, samplePath, text, promptText, outputPath }) {
   const modelConfig = config.cosyVoice2 || {};
@@ -415,7 +471,8 @@ async function runCosyVoice2LocalApi({ config, samplePath, text, promptText, out
   if (!isLocalBaseUrl(modelConfig.baseUrl || '')) throw new Error('CosyVoice2 只允许配置本地地址，例如 http://127.0.0.1:50000。');
   const endpoint = `${String(modelConfig.baseUrl).replace(/\/$/, '')}${modelConfig.endpoint || '/inference_zero_shot'}`;
   const started = Date.now();
-  const body = { tts_text: text, prompt_text: promptText || '', prompt_wav_path: samplePath, output_format: 'wav' };
+  const refPath = await ensureCosyRefAudioDuration(config, samplePath);
+  const body = { tts_text: text, prompt_text: promptText || '', prompt_wav_path: refPath, output_format: 'wav' };
   const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   await saveLocalModelAudioResponse(response, outputPath, modelConfig.baseUrl);
   return { ok: true, output: outputPath, elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)) };
@@ -529,12 +586,14 @@ function text(res, status, body) { res.writeHead(status, { 'Content-Type': 'text
 function mimeType(file) { const ext = path.extname(file).toLowerCase(); return { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.webm': 'audio/webm', '.ogg': 'audio/ogg' }[ext] || 'application/octet-stream'; }
 function extensionFromMime(mime = '') { if (mime.includes('mpeg') || mime.includes('mp3')) return '.mp3'; if (mime.includes('wav')) return '.wav'; if (mime.includes('mp4') || mime.includes('aac')) return '.m4a'; if (mime.includes('webm')) return '.webm'; if (mime.includes('ogg')) return '.ogg'; return ''; }
 function sanitizeName(name) { return name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) || '未命名声音样本'; }
-function safeConfig(config) { return { indexRoot: config.indexRoot, pythonExe: config.pythonExe, ffmpegExe: config.ffmpegExe, localTtsExe: config.localTtsExe, defaultMode: config.defaultMode, defaultModel: config.defaultModel, gptSovits: config.gptSovits, cosyVoice2: config.cosyVoice2 }; }
+function safeConfig(config) { return { indexRoot: config.indexRoot, pythonExe: config.pythonExe, ffmpegExe: config.ffmpegExe, localTtsExe: config.localTtsExe, defaultMode: config.defaultMode, defaultModel: config.defaultModel, cosyVoice2: config.cosyVoice2 }; }
 
 const port = Number(process.env.PORT || 3010);
 server.listen(port, '127.0.0.1', () => {
   console.log(`Voice clone web app: http://127.0.0.1:${port}`);
   console.log(`Using Index-TTS root: ${readConfig().indexRoot}`);
 });
+
+
 
 
